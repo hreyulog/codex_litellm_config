@@ -1,0 +1,16 @@
+# Local credentials and generated Codex configuration
+.codex/
+.env
+.env.*
+*.dpapi
+config.toml
+litellm-auth.ps1
+litellm-models.json
+backup-litellm/
+
+# Local verification output
+__pycache__/
+tests/runs/
+tests/runtime-*/
+tests/mock-requests.jsonl
+*.tmp
