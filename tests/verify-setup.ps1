@@ -1,10 +1,11 @@
 ﻿#requires -Version 5.1
-param([Parameter(Mandatory)][int]$Port, [Parameter(Mandatory)][string]$CliPath)
+param([Parameter(Mandatory)][int]$Port, [Parameter(Mandatory)][string]$CliPath,
+      [ValidateSet('en', 'zh-CN')][string]$Language = 'en')
 $ErrorActionPreference = 'Stop'
 $suiteRoot = Split-Path $PSScriptRoot -Parent
 $testRoot = Join-Path $PSScriptRoot ('runs\' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
-. (Join-Path $suiteRoot 'setup-codex-litellm.ps1') -Action Configure -CodexHome $testRoot -CodexExe $CliPath -BaseUrl "http://127.0.0.1:$Port/v1" -Model 'company-coding' -ContextWindow 100000
+. (Join-Path $suiteRoot 'setup-codex-litellm.ps1') -Language $Language -Action Configure -CodexHome $testRoot -CodexExe $CliPath -BaseUrl "http://127.0.0.1:$Port/v1" -Model 'company-coding' -ContextWindow 100000
 $testBundled = Invoke-LocalCodex $CliPath 'debug models --bundled' $testRoot
 if ($testBundled.Code -ne 0) { throw 'Cannot read installed Codex model catalog' }
 $testTemplate = ($testBundled.Out | ConvertFrom-Json).models[0]
@@ -92,6 +93,22 @@ foreach ($badWindow in @('0', '4095', '-100k', '1.5k', '1e5', '2147483648', '214
 # Exercise the actual interactive input function without a console or real key.
 $script:ContextAnswers = New-Object 'Collections.Generic.Queue[string]'
 function Read-Host { return $script:ContextAnswers.Dequeue() }
+# Check language choice, retry, default and translated validation errors.
+$savedLanguage = $script:UiLanguage
+$script:UiLanguage = ''
+$script:ContextAnswers.Enqueue('invalid')
+$script:ContextAnswers.Enqueue('2')
+Initialize-UiLanguage
+Assert ($script:UiLanguage -eq 'zh-CN') 'Language menu retries and selects Chinese'
+try { ConvertTo-ContextWindowTokens 'invalid' } catch { $localizedError = $_.Exception.Message }
+Assert ($localizedError.StartsWith('请输入')) 'Chinese validation error selected'
+$script:UiLanguage = ''
+$script:ContextAnswers.Enqueue('')
+Initialize-UiLanguage
+Assert ($script:UiLanguage -eq 'en') 'Language menu defaults to English'
+try { ConvertTo-ContextWindowTokens 'invalid' } catch { $localizedError = $_.Exception.Message }
+Assert ($localizedError.StartsWith('Enter an integer')) 'English validation error selected'
+$script:UiLanguage = $savedLanguage
 $script:ContextAnswers.Enqueue('')
 Assert ((Read-ContextWindow 32768) -eq 32768) 'Enter retains the default'
 $script:ContextAnswers.Enqueue('bad')

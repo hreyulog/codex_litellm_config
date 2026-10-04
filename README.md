@@ -1,221 +1,243 @@
-# Codex 桌面客户端一键接入公司 LiteLLM
+# Connect Codex Desktop to Your Company's LiteLLM Gateway
 
-面向 **Windows Codex 桌面客户端**的配置脚本。下载后双击运行，按提示填写公司 API 地址、Key 和模型名，即可把本地 Codex 的模型请求接入公司 LiteLLM 网关。
+**English** | [简体中文](README.zh-CN.md)
 
-脚本提供原配置备份、Windows DPAPI 加密保存 Key、模型别名配置、连接检查和恢复功能。正常使用无需安装 Python、Node.js 或额外 PowerShell 模块，也无需管理员权限。
+A setup script for **Codex Desktop on Windows**. Download the ZIP, run the launcher, and enter your company's API base URL, API key, and model alias to route local Codex model requests through your company's LiteLLM gateway.
 
-**[下载完整配置包 ZIP](https://github.com/hreyulog/codex_litellm_config/archive/refs/heads/main.zip)**
+The script backs up your existing configuration, encrypts the API key with Windows DPAPI, configures model metadata and the context window, checks the connection, and provides a restore option. Normal use requires no Python, Node.js, additional PowerShell modules, or administrator privileges.
 
-## 一、运行前准备
+**[Download the complete setup ZIP](https://github.com/hreyulog/codex_litellm_config/archive/refs/heads/main.zip)**
 
-先安装并打开一次公司认可的 Codex 桌面客户端，完成必要的初始化。此脚本要求客户端内置的 **Codex CLI ≥ 0.160.0**，运行时会自动检查版本；不必另装 CLI。
+The setup supports English and Chinese. Choose your language when the launcher starts, or pass `-Language en` or `-Language zh-CN` to skip the language menu.
 
-向公司的 API 管理员确认以下信息：
+## 1. Prerequisites
 
-| 需要的信息 | 示例 | 说明 |
+Install your company's approved version of Codex Desktop and open it once to initialize its configuration directory. The script requires the desktop app's bundled **Codex CLI 0.160.0 or later** and checks the version automatically. You do not need to install a separate CLI.
+
+Obtain these details from your company's API administrator:
+
+| Detail | Example | Notes |
 | --- | --- | --- |
-| API 基础地址 | `https://litellm.company.com/v1` | 包含管理员提供的完整 API 路径 |
-| API Key | 在本机隐藏输入 | 使用公司分配的 LiteLLM Key，不要提交到 GitHub |
-| 模型名 | `company-coding` | 使用网关对外提供的模型名，也称模型别名 |
+| API base URL | `https://litellm.company.com/v1` | Include the complete API path provided by your company. |
+| API key | Entered privately on your PC | Use your assigned LiteLLM key. Do not commit it to GitHub. |
+| Model alias | `company-coding` | Use the model name exposed by your gateway. |
 
-公司的网关和所选模型需要支持 **Responses API、SSE 流式输出和工具调用**。只有 `/chat/completions` 接口不足以直接接入当前 Codex。公司网络需要能访问该网关；若要求 VPN，请先连接 VPN。
+The gateway and selected model must support **Responses API, SSE streaming, and tool calls**. A working `/chat/completions` endpoint alone is insufficient for this direct Codex connection. Connect to your company network or VPN before running the script.
 
-如果公司已统一管理 Codex 连接或使用 SSO，请以管理员提供的配置方式为准。本脚本适用于自行配置公司 API Key 的情况。
+If your company manages Codex connections centrally or uses SSO, follow its administrator-provided setup. This script is intended for users configuring their own company API key.
 
-## 二、下载和运行
+## 2. Download and configure
 
-### 第 1 步：下载脚本
+### Step 1: Download and extract
 
-点击上面的“下载完整配置包 ZIP”，或在本仓库点击绿色 **Code → Download ZIP**。
+Use the download link above, or select **Code → Download ZIP** on GitHub.
 
-解压 ZIP，打开解压后的文件夹。应能看到：
+Extract the ZIP. The folder contains:
 
 ```text
 codex_litellm_config-main/
-├── setup.cmd                  双击启动
-├── setup-codex-litellm.ps1     主配置脚本
-├── README.md                  本教程
-└── tests/                     维护者使用的本地测试
+├── setup.cmd                  Double-click to start
+├── setup-codex-litellm.ps1     Main setup script
+├── README.md                  English guide (repository homepage)
+├── README.zh-CN.md            Chinese guide
+└── tests/                     Local checks for maintainers
 ```
 
-请解压后再运行，保留 `setup.cmd` 和 `setup-codex-litellm.ps1` 在同一个文件夹中。
+Run the files from the extracted folder. Keep `setup.cmd` and `setup-codex-litellm.ps1` together.
 
-### 第 2 步：退出 Codex
+### Step 2: Exit Codex
 
-保存当前工作，**完全退出 Codex 桌面客户端**，避免客户端在配置期间更新文件。完成配置后再重新打开。
+Save your work and **fully exit Codex Desktop** before configuring it, so the app does not modify the same files during setup. Reopen it after setup finishes.
 
-### 第 3 步：双击 setup.cmd
+### Step 3: Run setup.cmd
 
-双击 **setup.cmd**，出现菜单后输入 `1`，或者直接按回车：
+Double-click **setup.cmd** and select a language:
 
 ```text
-1. 配置公司 API
-9. 恢复首次运行前的配置（先备份当前文件）
-0. 退出
+Language / 语言
+1. English
+2. 简体中文
+Choose / 选择 [1]: 1
 ```
 
-按提示填写 API 基础地址，例如：
+Press Enter to use English. Enter `2` for Chinese. Then select `1`, or press Enter to configure the company API:
+
+```text
+1. Configure company API
+9. Restore the original configuration (back up current files first)
+0. Exit
+```
+
+At the API base URL prompt, enter your company's address, for example:
 
 ```text
 https://litellm.company.com/v1
 ```
 
-已有 `/v1` 时不会重复添加。仅填写域名根地址时，脚本自动补 `/v1`；公司提供的其他路径会保留。如果你拿到的是完整 `/responses` 或 `/chat/completions` 地址，脚本会去掉接口尾部，转换成基础地址。屏幕会显示最终请求地址，供你核对。
+The script keeps an existing `/v1`, adds `/v1` when you enter only the host's root URL, and preserves other company-provided base paths. If you enter a complete `/responses` or `/chat/completions` URL, it removes the endpoint suffix to obtain the base URL. Review the final request URL displayed on screen.
 
-接着输入公司的 API Key。**输入内容不会显示在屏幕上，也不会作为命令行参数保存。**粘贴后按回车。
+At the API key prompt, paste your key and press Enter. **The key is hidden on screen and is not passed as a command-line argument.**
 
-### 第 4 步：选择公司模型
+### Step 4: Select a model and context window
 
-脚本尝试读取网关模型列表。列表可用时，可以输入模型编号；也可以直接输入管理员提供的完整模型名：
+The script tries to retrieve the gateway's model list. Enter a model number, or type the complete model alias supplied by your administrator:
 
 ```text
 company-coding
 ```
 
-请选支持工具调用的聊天模型。这里使用 LiteLLM 的模型别名，不要擅自替换成底层供应商的模型名。
+Choose a chat model that supports tool calls. Use the LiteLLM alias exposed by your company rather than replacing it with the underlying provider's model name.
 
-如果网关已提供 Codex 模型元数据，脚本会直接使用。否则：
+If the gateway supplies Codex model metadata, the script uses it. Otherwise:
 
-- 模型名与客户端内置模型一致时，自动使用对应的内置元数据。
-- 自定义别名没有元数据时，脚本会询问别名背后的实际模型。只有管理员确认了映射、且该模型在屏幕列出的内置目录中，才填写实际模型名。
-- 不知道实际模型时，直接回车，使用通用文本和函数调用配置。
+- An alias matching a bundled Codex model uses that model's metadata.
+- For an unknown alias, the script asks for the underlying model. Enter a model from the displayed bundled list only if your administrator has confirmed the mapping.
+- If the model is unknown or is not an OpenAI model in that list, press Enter to use generic text and function-call metadata.
 
-随后脚本会让你设置上下文长度，无论使用通用配置还是已有模型元数据：
-
-```text
-上下文长度（tokens，例如 100000 或 100k；回车默认 32768）: 100k
-Codex 上下文窗口设置为 100000 tokens
-```
-
-可以输入 `100000` 或 `100k`，两者都表示 **100,000 tokens**；`128k` 表示 128,000。回车使用默认值：通用配置为 32768，已有元数据时使用该模型的窗口。无效输入会提示重新填写；最小值为 4096 tokens。
-
-**这个设置不会扩大模型本身的容量。**请填写公司模型实际支持的长度；脚本不会仅根据模型名中的 `100k`、`128k`、`200k` 推断容量。上下文包含提示、聊天记录、工具信息与输出，Codex 还会预留空间，因此界面显示的可用预算可能低于填写的数值。通用配置保留 90% 的有效窗口比例。
-
-脚本将数值同步写入 `config.toml` 的 `model_context_window` 和所选模型的目录元数据。命令行传入 `-ContextWindow 100000` 时，直接使用该值，不再询问；更换长度后完全退出客户端、重新打开并新建聊天。
-
-这些信息用于让 Codex 了解模型的上下文窗口、推理等级和工具格式。实际请求仍然使用你选定的**公司模型别名**。
-
-### 第 5 步：等待检查完成
-
-脚本先用 Codex 内置解析器检查生成的配置与模型目录，再发送两次简短请求，检查：
-
-1. Responses API 是否返回有效 SSE 流式响应。
-2. 模型能否返回函数调用。
-3. 工具结果能否续接成下一轮回复。
-
-这两次请求不发送工作文件，会计入公司 API 用量。检查通过后才写入正式配置；检查失败会显示原因，并保留原配置。基础检查不能保证所有工具、图片、搜索等功能都兼容。
-
-看到下面的提示，表示配置写入完成：
+The script then asks for the context window, whether you use generic or existing model metadata:
 
 ```text
-配置完成：Company LiteLLM / company-coding
+Context window (tokens, e.g. 100000 or 100k; Enter keeps 32768): 100k
+Codex context window set to 100000 tokens; usable budget reserves space for prompts, tools and output.
 ```
 
-### 第 6 步：重新打开 Codex
+Enter `100000` or `100k` for **100,000 tokens**, or another supported size such as `128k` for 128,000 tokens. Press Enter to keep the displayed default: 32768 for generic metadata, or the model's existing window when metadata is available. Invalid input prompts you to try again. The minimum is 4096 tokens.
 
-重新打开桌面客户端，选择公司的模型，**新建聊天**后使用。已有聊天可能仍保留原来的模型或提供商。
+**This setting does not increase the model's actual capacity.** Use a window your company's model supports. The script does not infer capacity from `100k`, `128k`, or `200k` in a model alias. Context includes prompts, conversation history, tool information, and output; Codex reserves space, so the usable budget may be lower than the entered value. Generic metadata retains a 90% effective context window.
 
-如有权限查看公司的 LiteLLM 用量或请求日志，可以确认请求使用了你的 Key 和公司模型别名。
+The script writes the value to both `model_context_window` in `config.toml` and the selected model's catalog metadata. Supplying `-ContextWindow 100000` on the command line skips the context prompt. After changing the window, fully restart Codex and start a new chat.
 
-## 三、Key 如何保存
+Model metadata tells Codex about the context window, reasoning levels, and tool format. Requests still use your selected **company model alias**.
 
-Key 用 Windows **DPAPI 加密**保存，由录入凭据时的 Windows 用户解密。Codex 通过官方的 `model_providers.<id>.auth` 认证命令调用本地 PowerShell 程序读取 Key，因此客户端重启后仍可使用，不依赖桌面程序继承终端环境变量。
+### Step 5: Wait for validation
 
-凭据文件与认证程序的访问权限限制为当前 Windows 用户和 SYSTEM。同一 Windows 用户运行的其他程序仍有能力解密凭据，DPAPI 不替代公司的密钥管理制度。
+The script first checks the generated configuration and model catalog with Codex's own parser. It then makes two small requests to verify:
 
-**在公司电脑上运行配置并输入 Key。**不要把另一台电脑生成的 DPAPI 凭据文件当作可移植 Key，也不要分享 `.codex` 配置或备份目录。
+1. A valid Responses API SSE stream.
+2. A function call from the model.
+3. A follow-up response after submitting the tool result.
 
-## 四、配置文件和备份
+These requests do not send your work files, but they count toward company API usage. The script writes the configuration only after these checks pass. On failure, it reports the error and keeps the original configuration. These basic checks do not establish compatibility with every tool, image, or search feature.
 
-默认配置目录是 `%USERPROFILE%\.codex`。若已设置 `CODEX_HOME`，脚本使用该目录；也可通过 `-CodexHome` 指定。
+This message means the configuration was saved:
 
-| 文件或目录 | 用途 |
+```text
+Setup complete: Company LiteLLM / company-coding
+```
+
+### Step 6: Reopen Codex
+
+Reopen Codex Desktop, select your company model, and **start a new chat**. Existing chats may retain their previous model or provider.
+
+If you have access to LiteLLM usage records or request logs, check that requests use your assigned key and selected company alias.
+
+## 3. API key storage
+
+The key is encrypted with Windows **DPAPI** and decrypted by the Windows user who entered it. Codex calls a local PowerShell credential helper through `model_providers.<id>.auth`. This works after restarting the app and does not depend on the desktop app inheriting terminal environment variables.
+
+Access to the credential file and helper is restricted to the current Windows user and SYSTEM. Other programs running as that same user can still decrypt the credential. DPAPI does not replace your company's key-management policy.
+
+**Run setup and enter your key on the company PC.** Encrypted DPAPI files from another computer are not portable API keys. Do not share your `.codex` configuration or backup directory.
+
+## 4. Configuration files and backups
+
+The default configuration directory is `%USERPROFILE%\.codex`. If `CODEX_HOME` is set, the script uses it instead. You can also specify an existing directory with `-CodexHome`.
+
+| File or directory | Purpose |
 | --- | --- |
-| `config.toml` | Codex 模型、公司网关和本地认证命令配置 |
-| `litellm-models.json` | 与当前客户端版本匹配的模型目录 |
-| `litellm-auth.ps1` | 供 Codex 调用的本地凭据读取程序 |
-| `litellm-key.dpapi` | 当前 Windows 用户的加密 Key |
-| `backup-litellm/initial/` | 首次配置前的完整文件备份 |
-| `backup-litellm/时间-随机编号/` | 每次写入或恢复前的额外备份 |
+| `config.toml` | Model, gateway, context window, and credential-helper configuration. |
+| `litellm-models.json` | Model catalog compatible with the installed Codex version. |
+| `litellm-auth.ps1` | Local credential helper called by Codex. |
+| `litellm-key.dpapi` | API key encrypted for the current Windows user. |
+| `backup-litellm/initial/` | Complete backup of managed files before the first setup. |
+| `backup-litellm/timestamp-random-id/` | Additional backup before each configuration or restore operation. |
 
-原有 MCP、项目权限、插件等无关设置会保留。已有默认模型、相关推理参数、服务等级、登录限制、默认 profile 和模型目录等设置会被替换或清除，避免覆盖公司连接。公司机器级和项目级配置仍可能影响最终生效的设置。
+Unrelated settings such as MCP servers, project permissions, and plugins are preserved. Existing default-model settings, related reasoning parameters, context overrides, service tiers, login restrictions, the default profile, and the model catalog are replaced or cleared to allow the company connection to take effect. Machine-level company configuration and project-level settings may still affect the final result.
 
-写入期间发生错误时，脚本会尝试自动回滚；如果回滚也失败，会显示可用于手动恢复的备份路径。
+If writing fails, the script attempts to roll back the changes. If rollback also fails, it displays a backup path for manual recovery.
 
-## 五、更换模型、Key 或恢复原配置
+## 5. Change the connection or restore the original configuration
 
-### 更换公司连接
+### Change the model, key, or context window
 
-再次双击 `setup.cmd`，选择 `1`，重新填写地址、Key 和模型。当前版本一次配置一个选定公司模型，并让它出现在模型选择器中。
+Run `setup.cmd` again, select your language and then `1`, and enter the new settings. The current version configures one selected company model at a time and makes it visible in the model picker.
 
-客户端升级后，也可重新运行脚本，用新版本的内置模型元数据重新生成目录。
+After upgrading Codex, you can rerun setup to regenerate the catalog using the updated bundled metadata.
 
-### 恢复原来的配置
+### Restore the original configuration
 
-完全退出 Codex，再运行 `setup.cmd`，选择 `9`。
+Fully exit Codex, run `setup.cmd`, select your language, and then select `9`.
 
-这会恢复**首次运行前的完整配置文件**，并清除当时不存在、由脚本新增的文件。以后在这些文件中添加的设置也会被还原；恢复操作前会先备份当前文件，方便取回后续修改。
+This restores the **complete managed files from before the first setup** and removes files created by the script that did not exist then. Later edits to these files are also reverted. The script backs up the current files before restoring them, so you can recover subsequent changes.
 
-恢复后重新打开 Codex，并新建聊天验证。
+Reopen Codex and start a new chat after restoring.
 
-## 六、PowerShell 命令用法
+## 6. PowerShell commands
 
-在解压后的文件夹打开 PowerShell，运行：
+Open PowerShell in the extracted folder and run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-codex-litellm.ps1
 ```
 
-如果已知地址和公司模型名，可以减少交互：
+If you know the base URL and alias, supply them along with a 100k context window and English prompts:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-codex-litellm.ps1 -Action Configure -BaseUrl "https://litellm.company.com/v1" -Model "company-coding"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup-codex-litellm.ps1 -Language en -Action Configure -BaseUrl "https://litellm.company.com/v1" -Model "company-coding" -ContextWindow 100000
 ```
 
-Key 始终隐藏输入，不作为参数。
+You can also pass options through the launcher:
 
-| 参数 | 作用 |
+```powershell
+.\setup.cmd -Language en -ContextWindow 100000
+.\setup.cmd -Language zh-CN -ContextWindow 100000
+```
+
+The API key is always entered privately and is never accepted as a parameter.
+
+| Parameter | Purpose |
 | --- | --- |
-| `-Action Configure` | 直接进入配置流程 |
-| `-Action Restore` | 直接恢复首次配置前的文件 |
-| `-BaseUrl "地址"` | 指定公司 API 基础地址 |
-| `-Model "公司模型别名"` | 指定网关模型名 |
-| `-UpstreamModel "实际模型名"` | 在管理员确认映射后，使用该内置模型的元数据 |
-| `-ContextWindow 100000` | 指定所选模型的上下文窗口为 100k，跳过长度输入；不得超过实际模型容量 |
-| `-CodexExe "C:\实际路径\bin\codex.exe"` | 安装位置特殊时，指定内置 CLI，而非桌面主程序 |
-| `-CodexHome "D:\自定义配置目录"` | 指定已有配置目录 |
-| `-SkipProbe` | 已验证兼容性或排查时跳过网关检查；此时连接尚未由脚本确认 |
+| `-Language en` / `-Language zh-CN` | Use English or Chinese without the language menu. |
+| `-Action Configure` | Go directly to configuration. |
+| `-Action Restore` | Restore files from before the first setup. |
+| `-BaseUrl "URL"` | Supply the company API base URL. |
+| `-Model "company-alias"` | Supply the gateway model alias. |
+| `-UpstreamModel "underlying-model"` | Use that bundled model's metadata after confirming the mapping with your administrator. |
+| `-ContextWindow 100000` | Set the selected model's context window to 100k and skip the context prompt; stay within its actual capacity. |
+| `-CodexExe "C:\actual-path\bin\codex.exe"` | Supply the bundled CLI path if it is installed elsewhere; use the CLI, not the desktop app executable. |
+| `-CodexHome "D:\custom-config-directory"` | Use an existing custom configuration directory. |
+| `-SkipProbe` | Skip the gateway checks for troubleshooting or an already validated connection; setup will not verify connectivity. |
 
-`ExecutionPolicy Bypass` 只用于这次 PowerShell 进程，不修改永久执行策略。公司组策略、AppLocker 或 WDAC 仍可能禁止运行；这时需要 IT 提供签名或批准的运行方式。
+`ExecutionPolicy Bypass` applies only to the launched PowerShell process and does not change the permanent execution policy. Company Group Policy, AppLocker, or WDAC may still block execution; ask IT for an approved or signed way to run the script.
 
-## 七、常见问题
+## 7. Troubleshooting
 
-| 现象 | 处理方法 |
+| Symptom | What to check |
 | --- | --- |
-| 找不到 `.codex` 目录 | 先安装并打开一次客户端；自定义目录需提前存在 |
-| 找不到内置 CLI | 更新客户端；安装路径特殊时用 `-CodexExe` 指定正确的内置程序 |
-| 内置 CLI 版本过低 | 更新公司认可的 Codex 桌面客户端，脚本要求至少 0.160.0 |
-| 读取不到模型列表 | 手动输入管理员提供的公司模型别名；脚本仍会检查该模型的基础连接 |
-| HTTP 401 | 检查 Key 是否有效、是否过期 |
-| HTTP 403 | 检查 Key 是否有模型和接口权限 |
-| HTTP 404 | 检查公司基础路径、`/v1` 和网关是否提供 `/responses` |
-| HTTP 400 / 工具调用失败 | 请管理员检查 LiteLLM 版本、模型路由和 Responses 转换是否兼容 |
-| HTTP 429 | 检查额度、并发限制，或稍后重试 |
-| 没收到 `response.completed` | 请管理员检查 Responses 的 SSE 流式协议 |
-| 网络或证书失败 | 检查 VPN、代理、公司 CA；脚本不会跳过证书校验 |
-| 本地认证命令失败 | 确认使用录入 Key 时的 Windows 用户，凭据仍在原目录，且公司允许认证程序运行 |
-| 配置成功但仍用其他模型 | 完全退出客户端、重启、新建聊天；检查公司管理配置和项目配置 |
+| `.codex` directory not found | Install and open Codex once; a custom directory must already exist. |
+| Bundled CLI not found | Update Codex, or supply the correct CLI path with `-CodexExe`. |
+| CLI version too old | Use a company-approved desktop version with bundled CLI 0.160.0 or later. |
+| Model list unavailable | Enter the company alias manually; setup still checks the selected model. |
+| HTTP 401 | Check whether the key is valid or expired. |
+| HTTP 403 | Check the key's model and endpoint permissions. |
+| HTTP 404 | Check the API base path, `/v1`, and availability of `/responses`. |
+| HTTP 400 or failed tool calls | Ask the administrator to check the LiteLLM version, model routing, and Responses translation compatibility. |
+| HTTP 429 | Check usage limits and concurrency, or retry later. |
+| Missing `response.completed` | Ask the administrator to check the Responses SSE protocol. |
+| Network or certificate error | Check VPN, proxy settings, and the company CA; the script does not disable certificate validation. |
+| Credential helper fails | Use the Windows account that entered the key, keep the credential in its original location, and check whether company policy allows the helper to run. |
+| Codex still uses another model | Fully exit, restart, and start a new chat; check company-managed and project configuration. |
 
-接入公司 API 改变的是**本地 Codex 的模型请求路由**。桌面客户端的其他联网功能可能访问其他服务，具体以公司网络与客户端管理策略为准。
+This configuration routes **local Codex model requests** through the gateway. Other desktop features may connect to separate services according to your company's network and client-management policies.
 
-## 八、验证情况与参考资料
+## 8. Verification and references
 
-已在 **Windows PowerShell 5.1 + Codex CLI 0.160.0** 上用本地模拟网关验证：配置保留、重复运行、备份恢复、写入失败回滚、错误响应拦截，以及实际 Codex 进程通过 DPAPI 认证完成一次流式模型请求。真实公司网关需在公司电脑上验证。
+The script has been tested with **Windows PowerShell 5.1 and Codex CLI 0.160.0**, using a local mock gateway. Checks cover configuration preservation, interactive 100k context selection, repeated setup, backups and restore, rollback after write failures, invalid gateway responses, and a real Codex process completing an SSE request using DPAPI authentication. Validate the real company gateway on the company PC.
 
-维护者可参考 [本地测试教程](tests/README.md)。
+Maintainers can follow the [local test guide](tests/README.md), currently available in Chinese.
 
-- [OpenAI：连接公司网关与认证命令](https://learn.chatgpt.com/docs/enterprise/connect-to-a-gateway)
-- [OpenAI：上下文窗口配置 `model_context_window`](https://learn.chatgpt.com/docs/config-file/config-reference)
-- [LiteLLM：Codex 桌面客户端配置](https://docs.litellm.ai/docs/proxy/client_setup/codex_chatgpt_desktop)
-- [LiteLLM：Codex CLI 与模型元数据](https://docs.litellm.ai/docs/proxy/client_setup/codex_cli)
-- [DeepSeek：Codex 一键配置示例](https://api-docs.deepseek.com/quick_start/agent_integrations/codex/)
+- [OpenAI: Connect to a company gateway and configure credential helpers](https://learn.chatgpt.com/docs/enterprise/connect-to-a-gateway)
+- [OpenAI: Context window configuration (`model_context_window`)](https://learn.chatgpt.com/docs/config-file/config-reference)
+- [LiteLLM: Codex Desktop configuration](https://docs.litellm.ai/docs/proxy/client_setup/codex_chatgpt_desktop)
+- [LiteLLM: Codex CLI and model metadata](https://docs.litellm.ai/docs/proxy/client_setup/codex_cli)
+- [DeepSeek: Codex setup example](https://api-docs.deepseek.com/quick_start/agent_integrations/codex/)

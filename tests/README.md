@@ -22,6 +22,12 @@ python .\tests\mock_gateway.py .\tests\mock-requests.jsonl
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\verify-setup.ps1 -Port 49691 -CliPath "C:\实际路径\bin\codex.exe"
 ```
 
+测试默认使用英文界面。增加 `-Language zh-CN` 可验证中文界面的完整配置和恢复流程：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\verify-setup.ps1 -Language zh-CN -Port 49691 -CliPath "C:\实际路径\bin\codex.exe"
+```
+
 该测试检查：
 
 - URL 路径处理及无效地址拦截。
@@ -30,6 +36,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\verify-setup.ps1
 - DPAPI 凭据加密、解密和访问权限。
 - 自定义模型目录能通过实际 Codex 解析器加载。
 - 配置时输入 `100k`、回车默认、无效输入重试，以及参数覆盖已有模型元数据；窗口同时写入 TOML 和模型目录。
+- 语言菜单的中文选择、英文默认、无效选项重试，以及所选语言的错误信息。
 - JSON 接口、截断 SSE、缺失 Responses 接口及 HTTP 错误处理。
 - 网关检查失败时保留配置，写入失败时自动回滚。
 - 恢复操作还原原文件的完整字节内容。
