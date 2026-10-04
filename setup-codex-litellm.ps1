@@ -10,7 +10,7 @@ param(
     [string]$BaseUrl,
     [string]$Model,
     [string]$UpstreamModel,
-    [int]$ContextWindow = 32768,
+    [ValidateRange(4096, 2147483647)][int]$ContextWindow = 32768,
     [string]$CodexHome,
     [string]$CodexExe,
     [switch]$SkipProbe
@@ -19,6 +19,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $script:ProviderId = 'company_litellm'
 $script:Utf8 = New-Object System.Text.UTF8Encoding($false)
+$script:ContextWindowWasSpecified = $PSBoundParameters.ContainsKey('ContextWindow')
 $script:ManagedFiles = @('config.toml', 'litellm-models.json', 'litellm-auth.ps1', 'litellm-key.dpapi')
 $script:AuthHelper = @'
 #requires -Version 5.1
@@ -264,6 +265,7 @@ function Merge-CodexConfig([string]$Original, [string]$ApiBase, [string]$ModelNa
     $root.Add('model = ' + (ConvertTo-TomlString $ModelName))
     $root.Add('model_provider = ' + (ConvertTo-TomlString $script:ProviderId))
     $root.Add('model_catalog_json = ' + (ConvertTo-TomlString $CatalogPath.Replace('\', '/')))
+    $root.Add('model_context_window = ' + [string]$Metadata.context_window)
     $root.Add('web_search = "disabled"')
     $root.Add('model_reasoning_summary = "none"')
     $effort = Get-PropertyValue $Metadata 'default_reasoning_level'
@@ -367,6 +369,30 @@ function Test-GatewayCompatibility([string]$ApiBase, [string]$KeyValue, [string]
     $texts = @($messages | ForEach-Object { $_.content } | Where-Object { $_.type -eq 'output_text' -and $_.text })
     if ($texts.Count -eq 0) { throw '工具结果续接后没有文本回复，请管理员检查 Responses 对话转换。' }
     Write-Host '网关基础兼容性检查通过。' -ForegroundColor Green
+}
+
+function ConvertTo-ContextWindowTokens([string]$Value) {
+    $text = $Value.Trim()
+    $number = [long]0
+    if ($text -notmatch '^(\d+)\s*([kK]?)$' -or
+        -not [long]::TryParse($Matches[1], [ref]$number) -or $number -gt [int]::MaxValue) {
+        throw '请输入整数 tokens（例如 100000），或整数加 k（例如 100k）；1k = 1000 tokens。'
+    }
+    $tokens = if ($Matches[2]) { $number * 1000 } else { $number }
+    if ($tokens -lt 4096 -or $tokens -gt [int]::MaxValue) {
+        throw '上下文长度必须在 4096 到 2147483647 tokens 之间，并且不能超过公司模型实际支持的长度。'
+    }
+    return [int]$tokens
+}
+
+function Read-ContextWindow([int]$DefaultTokens) {
+    Write-Host '此设置只调整 Codex 的上下文预算，不会扩大模型实际容量；请使用公司模型支持的长度。'
+    while ($true) {
+        $value = Read-Host "上下文长度（tokens，例如 100000 或 100k；回车默认 $DefaultTokens）"
+        if ([string]::IsNullOrWhiteSpace($value)) { return $DefaultTokens }
+        try { return ConvertTo-ContextWindowTokens $value }
+        catch { Write-Host $_.Exception.Message -ForegroundColor Yellow }
+    }
 }
 
 function New-GenericMetadata([string]$ModelName, [int]$Tokens, $Template = $null) {
@@ -532,11 +558,16 @@ function Invoke-Setup {
                 $metadata = $bundled.models | Where-Object { $_.slug -ceq $upstream } | Select-Object -First 1
                 if (-not $metadata) { throw '实际模型名不在客户端内置目录中。请留空使用通用配置，或由管理员提供 Codex 模型目录。' }
             } else {
-                Write-Host "使用通用文本/函数调用配置，上下文按 $ContextWindow tokens。请管理员确认窗口；可用 -ContextWindow 调整。"
+                Write-Host '使用通用文本/函数调用配置。'
                 $metadata = New-GenericMetadata $modelName $ContextWindow $bundled.models[0]
             }
         }
         $metadata = $metadata | ConvertTo-Json -Depth 100 -Compress | ConvertFrom-Json
+        $contextTokens = if ($script:ContextWindowWasSpecified) { $ContextWindow }
+                         else { Read-ContextWindow ([int](Get-PropertyValue $metadata 'context_window' $ContextWindow)) }
+        Set-PropertyValue $metadata 'context_window' $contextTokens
+        Set-PropertyValue $metadata 'max_context_window' $contextTokens
+        Write-Host "Codex 上下文窗口设置为 $contextTokens tokens；实际可用预算还会预留系统提示、工具和输出空间。"
         Set-PropertyValue $metadata 'slug' $modelName
         Set-PropertyValue $metadata 'display_name' $modelName
         Set-PropertyValue $metadata 'visibility' 'list'

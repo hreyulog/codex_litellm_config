@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $suiteRoot = Split-Path $PSScriptRoot -Parent
 $testRoot = Join-Path $PSScriptRoot ('runs\' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
-. (Join-Path $suiteRoot 'setup-codex-litellm.ps1') -Action Configure -CodexHome $testRoot -CodexExe $CliPath -BaseUrl "http://127.0.0.1:$Port/v1" -Model 'company-coding'
+. (Join-Path $suiteRoot 'setup-codex-litellm.ps1') -Action Configure -CodexHome $testRoot -CodexExe $CliPath -BaseUrl "http://127.0.0.1:$Port/v1" -Model 'company-coding' -ContextWindow 100000
 $testBundled = Invoke-LocalCodex $CliPath 'debug models --bundled' $testRoot
 if ($testBundled.Code -ne 0) { throw 'Cannot read installed Codex model catalog' }
 $testTemplate = ($testBundled.Out | ConvertFrom-Json).models[0]
@@ -83,6 +83,20 @@ Assert-Throws { Get-ApiBase 'https://company.example/v1?api_key=secret' } 'Rejec
 Assert-Throws { Get-ApiBase 'https://user:pass@company.example/v1' } 'Reject basic credentials in URL'
 Assert-Throws { Get-TomlStatements 'prompt = """unfinished' } 'Reject unclosed strings'
 Assert-Throws { Protect-ApiKey "bad`nkey" } 'Reject multiline keys'
+Assert ((ConvertTo-ContextWindowTokens '100k') -eq 100000) '100k uses decimal tokens'
+Assert ((ConvertTo-ContextWindowTokens ' 128K ') -eq 128000) 'Case and whitespace accepted'
+Assert ((ConvertTo-ContextWindowTokens '100000') -eq 100000) 'Integer token count accepted'
+foreach ($badWindow in @('0', '4095', '-100k', '1.5k', '1e5', '2147483648', '2147483647k', '999999999999999999999999')) {
+    Assert-Throws { ConvertTo-ContextWindowTokens $badWindow } 'Invalid or overflowing window rejected'
+}
+# Exercise the actual interactive input function without a console or real key.
+$script:ContextAnswers = New-Object 'Collections.Generic.Queue[string]'
+function Read-Host { return $script:ContextAnswers.Dequeue() }
+$script:ContextAnswers.Enqueue('')
+Assert ((Read-ContextWindow 32768) -eq 32768) 'Enter retains the default'
+$script:ContextAnswers.Enqueue('bad')
+$script:ContextAnswers.Enqueue('100k')
+Assert ((Read-ContextWindow 32768) -eq 100000) 'Invalid input retries and accepts 100k'
 
 Invoke-Setup
 $configured = [IO.File]::ReadAllText($configPath)
@@ -97,6 +111,7 @@ Assert ($configured.Contains('name = "Other"')) 'Other provider retained'
 Assert (-not $configured.Contains('old-local-test-secret')) 'Old provider token removed'
 Assert (-not $configured.Contains('dummy-local-test-key')) 'Key absent from TOML'
 Assert (-not $configured.Contains('model_context_window = 999999')) 'Stale context override removed'
+Assert ($configured.Contains('model_context_window = 100000')) 'Explicit context reaches config'
 Assert ([IO.File]::ReadAllText($envPath) -ceq $originalEnv) 'Existing .env unchanged'
 Assert (-not $keyFile.Contains('dummy-local-test-key')) 'Credential is encrypted'
 $decrypted = ConvertTo-SecureString -String $keyFile
@@ -107,6 +122,7 @@ Assert (([regex]::Matches($configured, '(?m)^\[desktop\]')).Count -eq 1) 'No dup
 $catalog = [IO.File]::ReadAllText((Join-Path $testRoot 'litellm-models.json')) | ConvertFrom-Json
 $visible = @($catalog.models | Where-Object { $_.visibility -eq 'list' -and $_.supported_in_api })
 Assert ($visible.Count -eq 1 -and $visible[0].slug -eq 'company-coding') 'Picker contains selected company alias'
+Assert ($visible[0].context_window -eq 100000 -and $visible[0].max_context_window -eq 100000) 'Explicit context overrides known-model metadata'
 Assert ((Get-Acl -LiteralPath (Join-Path $testRoot 'litellm-key.dpapi')).AreAccessRulesProtected) 'Credential ACL protected'
 
 # Rerun must be idempotent and avoid duplicate keys/tables.
@@ -115,7 +131,7 @@ Assert ([IO.File]::ReadAllText($configPath) -ceq $configured) 'Repeated setup is
 $keyFile = [IO.File]::ReadAllText((Join-Path $testRoot 'litellm-key.dpapi'))
 
 # Generic metadata must also load through the real installed Codex parser.
-$generic = New-GenericMetadata 'unknown-company-model' 32768 $testTemplate
+$generic = New-GenericMetadata 'unknown-company-model' 100000 $testTemplate
 $genericPath = Join-Path $testRoot 'generic-models.json'
 [IO.File]::WriteAllText($genericPath, (ConvertTo-Json -InputObject @{ models = @($generic) } -Depth 20), $script:Utf8)
 $genericHome = Join-Path $testRoot 'generic-home'
@@ -126,6 +142,24 @@ $genericResult = Invoke-LocalCodex $CliPath 'debug models' $genericHome
 Assert ($genericResult.Code -eq 0) 'Generic catalog accepted'
 $loadedGeneric = $genericResult.Out | ConvertFrom-Json
 Assert (@($loadedGeneric.models | Where-Object { $_.slug -eq 'unknown-company-model' }).Count -eq 1) 'Validation actually loads custom catalog'
+Assert ($loadedGeneric.models[0].context_window -eq 100000) 'Codex parser loads the 100k generic window'
+
+# Exercise full setup with interactive context and generic metadata, then restore
+# the known-model setup for the existing failure/rollback checks below.
+$UpstreamModel = ''
+$script:ContextWindowWasSpecified = $false
+$script:ContextAnswers.Enqueue('')
+$script:ContextAnswers.Enqueue('100k')
+Invoke-Setup
+$interactiveCatalog = [IO.File]::ReadAllText((Join-Path $testRoot 'litellm-models.json')) | ConvertFrom-Json
+$interactiveModel = @($interactiveCatalog.models | Where-Object { $_.slug -eq 'company-coding' })[0]
+Assert ($interactiveModel.context_window -eq 100000 -and $interactiveModel.effective_context_window_percent -eq 90) 'Interactive context updates generic metadata and retains output reserve'
+Assert ([IO.File]::ReadAllText($configPath).Contains('model_context_window = 100000')) 'Interactive context reaches config'
+$UpstreamModel = $testTemplate.slug
+$script:ContextWindowWasSpecified = $true
+Invoke-Setup
+$configured = [IO.File]::ReadAllText($configPath)
+$keyFile = [IO.File]::ReadAllText((Join-Path $testRoot 'litellm-key.dpapi'))
 
 # Reject JSON-only, truncated SSE, missing Responses endpoints, and credential echoes.
 Assert-Throws { Test-GatewayCompatibility "http://127.0.0.1:$Port/json-only/v1" 'dummy-local-test-key' 'company-coding' } 'Reject JSON-only endpoint'

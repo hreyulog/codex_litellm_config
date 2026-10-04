@@ -78,7 +78,20 @@ company-coding
 
 - 模型名与客户端内置模型一致时，自动使用对应的内置元数据。
 - 自定义别名没有元数据时，脚本会询问别名背后的实际模型。只有管理员确认了映射、且该模型在屏幕列出的内置目录中，才填写实际模型名。
-- 不知道实际模型时，直接回车，使用通用文本和函数调用配置。通用配置的上下文窗口暂设为 **32768 tokens**，应由管理员确认；可通过 `-ContextWindow` 参数调整。
+- 不知道实际模型时，直接回车，使用通用文本和函数调用配置。
+
+随后脚本会让你设置上下文长度，无论使用通用配置还是已有模型元数据：
+
+```text
+上下文长度（tokens，例如 100000 或 100k；回车默认 32768）: 100k
+Codex 上下文窗口设置为 100000 tokens
+```
+
+可以输入 `100000` 或 `100k`，两者都表示 **100,000 tokens**；`128k` 表示 128,000。回车使用默认值：通用配置为 32768，已有元数据时使用该模型的窗口。无效输入会提示重新填写；最小值为 4096 tokens。
+
+**这个设置不会扩大模型本身的容量。**请填写公司模型实际支持的长度；脚本不会仅根据模型名中的 `100k`、`128k`、`200k` 推断容量。上下文包含提示、聊天记录、工具信息与输出，Codex 还会预留空间，因此界面显示的可用预算可能低于填写的数值。通用配置保留 90% 的有效窗口比例。
+
+脚本将数值同步写入 `config.toml` 的 `model_context_window` 和所选模型的目录元数据。命令行传入 `-ContextWindow 100000` 时，直接使用该值，不再询问；更换长度后完全退出客户端、重新打开并新建聊天。
 
 这些信息用于让 Codex 了解模型的上下文窗口、推理等级和工具格式。实际请求仍然使用你选定的**公司模型别名**。
 
@@ -168,7 +181,7 @@ Key 始终隐藏输入，不作为参数。
 | `-BaseUrl "地址"` | 指定公司 API 基础地址 |
 | `-Model "公司模型别名"` | 指定网关模型名 |
 | `-UpstreamModel "实际模型名"` | 在管理员确认映射后，使用该内置模型的元数据 |
-| `-ContextWindow 65536` | 指定通用配置的上下文窗口；数值需由管理员确认 |
+| `-ContextWindow 100000` | 指定所选模型的上下文窗口为 100k，跳过长度输入；不得超过实际模型容量 |
 | `-CodexExe "C:\实际路径\bin\codex.exe"` | 安装位置特殊时，指定内置 CLI，而非桌面主程序 |
 | `-CodexHome "D:\自定义配置目录"` | 指定已有配置目录 |
 | `-SkipProbe` | 已验证兼容性或排查时跳过网关检查；此时连接尚未由脚本确认 |
@@ -202,6 +215,7 @@ Key 始终隐藏输入，不作为参数。
 维护者可参考 [本地测试教程](tests/README.md)。
 
 - [OpenAI：连接公司网关与认证命令](https://learn.chatgpt.com/docs/enterprise/connect-to-a-gateway)
+- [OpenAI：上下文窗口配置 `model_context_window`](https://learn.chatgpt.com/docs/config-file/config-reference)
 - [LiteLLM：Codex 桌面客户端配置](https://docs.litellm.ai/docs/proxy/client_setup/codex_chatgpt_desktop)
 - [LiteLLM：Codex CLI 与模型元数据](https://docs.litellm.ai/docs/proxy/client_setup/codex_cli)
 - [DeepSeek：Codex 一键配置示例](https://api-docs.deepseek.com/quick_start/agent_integrations/codex/)
